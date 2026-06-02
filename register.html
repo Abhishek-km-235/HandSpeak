@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HandSpeak — Registration</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-deep:    #08061a;
+    --bg-mid:     #0d0a28;
+    --bg-card:    rgba(16, 12, 45, 0.85);
+    --cyan:       #00e5ff;
+    --cyan-dim:   #0099bb;
+    --cyan-glow:  rgba(0, 229, 255, 0.18);
+    --purple:     #7c3cff;
+    --purple-dim: #4a1f99;
+    --magenta:    #f020b0;
+    --white:      #e8f0ff;
+    --sub:        #6a7aaf;
+    --border:     rgba(0, 229, 255, 0.25);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg-deep);
+    font-family: 'Rajdhani', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── Animated particle canvas background ── */
+  #bg-canvas {
+    position: fixed; inset: 0; z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ── Hex grid overlay ── */
+  .hex-grid {
+    position: fixed; inset: 0; z-index: 0;
+    opacity: 0.08;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='104' viewBox='0 0 60 104'%3E%3Cpolygon points='30,2 58,17 58,47 30,62 2,47 2,17' fill='none' stroke='%2300e5ff' stroke-width='0.8'/%3E%3Cpolygon points='30,52 58,67 58,97 30,112 2,97 2,67' fill='none' stroke='%2300e5ff' stroke-width='0.8'/%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+
+  /* ── Radial glow blobs ── */
+  .glow-blob {
+    position: fixed; border-radius: 50%;
+    filter: blur(90px); pointer-events: none; z-index: 0;
+  }
+  .blob1 { width: 500px; height: 500px; background: rgba(124,60,255,0.15); top: -120px; right: -80px; }
+  .blob2 { width: 400px; height: 400px; background: rgba(0,229,255,0.10); bottom: -100px; left: -60px; }
+  .blob3 { width: 300px; height: 300px; background: rgba(240,32,176,0.08); top: 40%; left: 35%; animation: blobPulse 6s ease-in-out infinite; }
+  @keyframes blobPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.3)} }
+
+  /* ── Scan lines ── */
+  .scanlines {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  }
+
+  /* ── Main wrapper ── */
+  .page {
+    position: relative; z-index: 2;
+    width: 100%; height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+
+  /* ── Top title ── */
+  .page-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.35em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    position: relative;
+  }
+  .page-title::before,
+  .page-title::after {
+    content: '';
+    position: absolute; top: 50%;
+    width: 60px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan));
+  }
+  .page-title::before { right: calc(100% + 16px); }
+  .page-title::after  { left:  calc(100% + 16px); transform: scaleX(-1); }
+
+  /* ── Card ── */
+  .card {
+    width: 400px;
+    background: var(--bg-card);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    border-radius: 18px;
+    padding: 36px 32px 32px;
+    position: relative;
+    backdrop-filter: blur(20px);
+    box-shadow:
+      0 0 0 1px rgba(0,229,255,0.08),
+      0 0 40px rgba(124,60,255,0.18),
+      0 0 80px rgba(0,229,255,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+    animation: cardIn 0.6s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  @keyframes cardIn {
+    from { opacity:0; transform: translateY(24px) scale(0.97); }
+    to   { opacity:1; transform: translateY(0)    scale(1); }
+  }
+
+  /* Corner bracket accents */
+  .card::before, .card::after {
+    content: '';
+    position: absolute;
+    width: 20px; height: 20px;
+    border-color: var(--cyan);
+    border-style: solid;
+  }
+  .card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-radius: 18px 0 0 0; }
+  .card::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-radius: 0 0 18px 0; }
+  .card-corner-tr, .card-corner-bl {
+    position: absolute;
+    width: 20px; height: 20px;
+    border-color: var(--cyan);
+    border-style: solid;
+  }
+  .card-corner-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; border-radius: 0 18px 0 0; }
+  .card-corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; border-radius: 0 0 0 18px; }
+
+  /* HUD top bar */
+  .card-hud {
+    position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg-deep);
+    padding: 5px 18px;
+    border: 1px solid rgba(0,229,255,0.25);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+  }
+  .hud-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); animation: hudBlink 1.4s infinite; }
+  .hud-dot:nth-child(2) { animation-delay: 0.2s; background: var(--purple); }
+  .hud-dot:nth-child(3) { animation-delay: 0.4s; background: var(--magenta); }
+  @keyframes hudBlink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Field groups ── */
+  .field-group {
+    margin-bottom: 20px;
+    animation: fieldIn 0.5s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .field-group:nth-child(2) { animation-delay: 0.08s; }
+  .field-group:nth-child(3) { animation-delay: 0.16s; }
+  .field-group:nth-child(4) { animation-delay: 0.24s; }
+  @keyframes fieldIn {
+    from { opacity:0; transform: translateX(-12px); }
+    to   { opacity:1; transform: translateX(0); }
+  }
+
+  .field-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px; font-weight: 600;
+    color: var(--white);
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .field-wrap {
+    position: relative;
+    display: flex; align-items: center;
+  }
+  .field-icon {
+    position: absolute; left: 14px;
+    font-size: 14px;
+    color: var(--cyan);
+    opacity: 0.7;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .field-wrap:focus-within .field-icon { opacity: 1; }
+
+  input {
+    width: 100%;
+    background: rgba(0, 229, 255, 0.04);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    border-radius: 10px;
+    padding: 13px 16px 13px 42px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px; font-weight: 500;
+    color: var(--cyan);
+    letter-spacing: 0.06em;
+    outline: none;
+    transition: all 0.25s ease;
+    caret-color: var(--cyan);
+  }
+  input::placeholder {
+    color: rgba(0, 229, 255, 0.3);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  input:focus {
+    background: rgba(0, 229, 255, 0.07);
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 3px rgba(0,229,255,0.1), 0 0 20px rgba(0,229,255,0.08);
+  }
+  input:focus + .field-line { transform: scaleX(1); }
+
+  .field-line {
+    position: absolute; bottom: 0; left: 10px; right: 10px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+    border-radius: 1px;
+  }
+
+  /* ── Proceed button ── */
+  .btn-proceed {
+    width: 100%; margin-top: 28px;
+    position: relative;
+    background: transparent;
+    border: none; outline: none; cursor: pointer;
+    animation: fieldIn 0.5s 0.3s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .btn-inner {
+    position: relative;
+    background: rgba(0, 229, 255, 0.06);
+    border: 1.5px solid var(--cyan);
+    border-radius: 50px;
+    padding: 15px 32px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+  .btn-proceed:hover .btn-inner {
+    background: rgba(0, 229, 255, 0.12);
+    box-shadow: 0 0 30px rgba(0,229,255,0.25), 0 0 60px rgba(0,229,255,0.1);
+  }
+  .btn-proceed:hover .btn-shine { transform: translateX(300%); }
+  .btn-proceed:active .btn-inner { transform: scale(0.98); }
+
+  .btn-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.25em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    position: relative; z-index: 1;
+  }
+
+  .btn-shine {
+    position: absolute; top: 0; left: -100%;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0,229,255,0.15), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+  }
+  .btn-proceed:hover .btn-shine { transform: translateX(400%); }
+
+  /* Glow ring on button */
+  .btn-glow {
+    position: absolute; inset: -4px;
+    border-radius: 54px;
+    background: transparent;
+    border: 1px solid rgba(0,229,255,0.0);
+    transition: border-color 0.3s, box-shadow 0.3s;
+    pointer-events: none;
+  }
+  .btn-proceed:hover .btn-glow {
+    border-color: rgba(0,229,255,0.2);
+    box-shadow: 0 0 20px rgba(0,229,255,0.12);
+  }
+
+  /* ── Error ── */
+  .error-msg {
+    text-align: center; margin-top: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: #ff3355;
+    letter-spacing: 0.08em;
+    min-height: 18px;
+  }
+
+  /* ── Bottom logo strip ── */
+  .logo-strip {
+    margin-top: 24px;
+    display: flex; align-items: center; gap: 10px;
+    opacity: 0.45;
+    animation: fieldIn 0.5s 0.45s both;
+  }
+  .logo-strip span {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px; letter-spacing: 0.2em;
+    color: var(--cyan);
+  }
+  .logo-strip-line { flex: 1; width: 60px; height: 1px; background: linear-gradient(90deg, transparent, var(--cyan)); }
+  .logo-strip-line.r { background: linear-gradient(90deg, var(--cyan), transparent); }
+
+  /* ── Corner HUD elements ── */
+  .corner-hud {
+    position: fixed; z-index: 3;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px; color: rgba(0,229,255,0.25);
+    letter-spacing: 0.1em;
+  }
+  .corner-hud.tl { top: 16px; left: 20px; }
+  .corner-hud.tr { top: 16px; right: 20px; text-align: right; }
+  .corner-hud.bl { bottom: 16px; left: 20px; }
+  .corner-hud.br { bottom: 16px; right: 20px; text-align: right; }
+</style>
+</head>
+<body>
+
+<!-- Backgrounds -->
+<canvas id="bg-canvas"></canvas>
+<div class="hex-grid"></div>
+<div class="glow-blob blob1"></div>
+<div class="glow-blob blob2"></div>
+<div class="glow-blob blob3"></div>
+<div class="scanlines"></div>
+
+<!-- Corner HUD info -->
+<div class="corner-hud tl">SYS: HANDSPEAK v2.0<br>STATUS: ONLINE</div>
+<div class="corner-hud tr">CAM: READY<br>MODEL: LOADED</div>
+<div class="corner-hud bl">GESTURES: 20<br>ACCURACY: 98.2%</div>
+<div class="corner-hud br">BUILD: 2026.04<br>MODE: SECURE</div>
+
+<!-- Main page -->
+<div class="page">
+  <div class="page-title">PERSONAL DETAILS ENTRY</div>
+
+  <div class="card">
+    <div class="card-corner-tr"></div>
+    <div class="card-corner-bl"></div>
+
+    <!-- HUD dots top -->
+    <div class="card-hud">
+      <div class="hud-dot"></div>
+      <div class="hud-dot"></div>
+      <div class="hud-dot"></div>
+    </div>
+
+    <div style="height:12px"></div>
+
+    <!-- Name field -->
+    <div class="field-group">
+      <label class="field-label">Name:</label>
+      <div class="field-wrap">
+        <span class="field-icon">👤</span>
+        <input type="text" id="inp-name" placeholder="Enter your full name" autocomplete="off">
+        <div class="field-line"></div>
+      </div>
+    </div>
+
+    <!-- Age field -->
+    <div class="field-group">
+      <label class="field-label">Age:</label>
+      <div class="field-wrap">
+        <span class="field-icon">🗓</span>
+        <input type="text" id="inp-age" placeholder="Enter your age" autocomplete="off">
+        <div class="field-line"></div>
+      </div>
+    </div>
+
+    <!-- Place field -->
+    <div class="field-group">
+      <label class="field-label">Place:</label>
+      <div class="field-wrap">
+        <span class="field-icon">📍</span>
+        <input type="text" id="inp-place" placeholder="Enter your location" autocomplete="off">
+        <div class="field-line"></div>
+      </div>
+    </div>
+
+    <button class="btn-proceed" onclick="handleProceed()">
+      <div class="btn-glow"></div>
+      <div class="btn-inner">
+        <div class="btn-shine"></div>
+        <span class="btn-text">PROCEED</span>
+      </div>
+    </button>
+
+    <div class="error-msg" id="err-msg"></div>
+  </div>
+
+  <div class="logo-strip">
+    <div class="logo-strip-line"></div>
+    <span>HANDSPEAK · GESTURE AI · 2026</span>
+    <div class="logo-strip-line r"></div>
+  </div>
+</div>
+
+<script>
+// ── Particle canvas ───────────────────────────────────────────────────────────
+const canvas = document.getElementById('bg-canvas');
+const ctx    = canvas.getContext('2d');
+let W, H, particles = [];
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x  = Math.random() * W;
+    this.y  = Math.random() * H;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.r  = Math.random() * 1.5 + 0.3;
+    this.a  = Math.random() * 0.5 + 0.1;
+    this.col= Math.random() > 0.5 ? '0,229,255' : '124,60,255';
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) this.reset();
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(${this.col},${this.a})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 120; i++) particles.push(new Particle());
+
+// Connect nearby particles
+function drawConnections() {
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i+1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const d  = Math.sqrt(dx*dx + dy*dy);
+      if (d < 100) {
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.strokeStyle = `rgba(0,229,255,${0.08*(1-d/100)})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function animLoop() {
+  ctx.clearRect(0, 0, W, H);
+  drawConnections();
+  particles.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(animLoop);
+}
+animLoop();
+
+// ── Form handling ─────────────────────────────────────────────────────────────
+function handleProceed() {
+  const name  = document.getElementById('inp-name').value.trim();
+  const age   = document.getElementById('inp-age').value.trim();
+  const place = document.getElementById('inp-place').value.trim();
+  const err   = document.getElementById('err-msg');
+
+  if (!name)            { err.textContent = '⚠ PLEASE ENTER YOUR NAME';   shake(); return; }
+  if (!age)             { err.textContent = '⚠ PLEASE ENTER YOUR AGE';    shake(); return; }
+  if (!/^\d+$/.test(age)){ err.textContent = '⚠ AGE MUST BE A NUMBER';    shake(); return; }
+  if (!place)           { err.textContent = '⚠ PLEASE ENTER YOUR PLACE';  shake(); return; }
+
+  err.textContent = '';
+  // Store and transition
+  localStorage.setItem('hs_user', JSON.stringify({name, age, place}));
+  document.querySelector('.card').style.animation = 'cardOut 0.4s forwards';
+  setTimeout(() => { window.location.href = 'main.html'; }, 400);
+}
+
+function shake() {
+  const card = document.querySelector('.card');
+  card.style.animation = 'none';
+  card.style.transform = 'translateX(-8px)';
+  setTimeout(() => card.style.transform = 'translateX(8px)', 60);
+  setTimeout(() => card.style.transform = 'translateX(-5px)', 120);
+  setTimeout(() => card.style.transform = 'translateX(0)', 180);
+}
+
+// Enter key support
+document.addEventListener('keydown', e => { if (e.key === 'Enter') handleProceed(); });
+
+// Add cardOut keyframe dynamically
+const style = document.createElement('style');
+style.textContent = `@keyframes cardOut { to { opacity:0; transform:scale(0.95) translateY(-20px); } }`;
+document.head.appendChild(style);
+</script>
+</body>
+</html>

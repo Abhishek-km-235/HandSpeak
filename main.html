@@ -1,0 +1,2079 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HandSpeak — Detection</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #07051a;
+      --bg2: #0d0a28;
+      --bg3: #110d35;
+      --cyan: #00e5ff;
+      --cyan2: #00b4d8;
+      --purple: #7c3cff;
+      --purp2: #b09fff;
+      --magenta: #f020b0;
+      --green: #00ff88;
+      --white: #e8f0ff;
+      --sub: #6a7aaf;
+      --red: #ff3355;
+      --gold: #ffd700;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      font-family: 'Rajdhani', sans-serif;
+      overflow: hidden;
+      color: var(--white);
+    }
+
+    /* ── Background layers ── */
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .hex-grid {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      opacity: 0.06;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='104' viewBox='0 0 60 104'%3E%3Cpolygon points='30,2 58,17 58,47 30,62 2,47 2,17' fill='none' stroke='%2300e5ff' stroke-width='0.8'/%3E%3Cpolygon points='30,52 58,67 58,97 30,112 2,97 2,67' fill='none' stroke='%2300e5ff' stroke-width='0.8'/%3E%3C/svg%3E");
+      pointer-events: none;
+    }
+
+    .glow-blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .blob1 {
+      width: 600px;
+      height: 600px;
+      background: rgba(124, 60, 255, 0.12);
+      top: -150px;
+      right: -100px;
+    }
+
+    .blob2 {
+      width: 500px;
+      height: 500px;
+      background: rgba(0, 229, 255, 0.08);
+      bottom: -120px;
+      left: -80px;
+    }
+
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.025) 2px, rgba(0, 0, 0, 0.025) 4px);
+    }
+
+    /* ── TOP BANNER ── */
+    .top-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 58px;
+      z-index: 10;
+      background: rgba(10, 7, 30, 0.92);
+      border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+      backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .top-banner::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), var(--purple), var(--magenta), var(--cyan), transparent);
+      animation: bannerScan 3s linear infinite;
+    }
+
+    @keyframes bannerScan {
+      0% {
+        transform: translateX(-100%);
+      }
+
+      100% {
+        transform: translateX(100%);
+      }
+    }
+
+    /* Dot decorations */
+    .banner-dots {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      gap: 6px;
+    }
+
+    .banner-dots.left {
+      left: 20px;
+    }
+
+    .banner-dots.right {
+      right: 20px;
+    }
+
+    .banner-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--cyan);
+      opacity: 0.5;
+    }
+
+    /* HUD frame around banner text */
+    .banner-frame {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      position: relative;
+    }
+
+    .banner-frame-bracket {
+      width: 18px;
+      height: 30px;
+      border: 1.5px solid var(--cyan);
+      opacity: 0.6;
+    }
+
+    .banner-frame-bracket.l {
+      border-right: none;
+      border-radius: 4px 0 0 4px;
+    }
+
+    .banner-frame-bracket.r {
+      border-left: none;
+      border-radius: 0 4px 4px 0;
+    }
+
+    .banner-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: var(--cyan);
+      padding: 0 18px;
+      text-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+      transition: all 0.3s ease;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .layout {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 230px 1fr 280px;
+      grid-template-rows: 1fr;
+      height: 100vh;
+      padding-top: 58px;
+      padding-bottom: 12px;
+      gap: 12px;
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+
+    /* ── PANEL base style ── */
+    .panel {
+      background: rgba(14, 10, 38, 0.85);
+      border: 1px solid rgba(0, 229, 255, 0.15);
+      border-radius: 14px;
+      backdrop-filter: blur(16px);
+      position: relative;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(0, 229, 255, 0.03) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* Corner accents */
+    .panel .corner {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+    }
+
+    .panel .corner.tl {
+      top: 0;
+      left: 0;
+      border-top: 2px solid var(--cyan);
+      border-left: 2px solid var(--cyan);
+      border-radius: 14px 0 0 0;
+    }
+
+    .panel .corner.tr {
+      top: 0;
+      right: 0;
+      border-top: 2px solid var(--cyan);
+      border-right: 2px solid var(--cyan);
+      border-radius: 0 14px 0 0;
+    }
+
+    .panel .corner.bl {
+      bottom: 0;
+      left: 0;
+      border-bottom: 2px solid var(--cyan);
+      border-left: 2px solid var(--cyan);
+      border-radius: 0 0 0 14px;
+    }
+
+    .panel .corner.br {
+      bottom: 0;
+      right: 0;
+      border-bottom: 2px solid var(--cyan);
+      border-right: 2px solid var(--cyan);
+      border-radius: 0 0 14px 0;
+    }
+
+    /* ── LEFT PANEL ── */
+    .left-panel {
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    /* Profile section */
+    .profile-section {
+      text-align: center;
+      padding-bottom: 14px;
+    }
+
+    /* Avatar */
+    .avatar-ring {
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      margin: 8px auto 10px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .avatar-ring::before {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: conic-gradient(var(--cyan), var(--purple), var(--magenta), var(--cyan));
+      animation: avatarSpin 4s linear infinite;
+    }
+
+    .avatar-ring::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 50%;
+      background: var(--bg2);
+    }
+
+    @keyframes avatarSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .avatar-inner {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1a0a3a, #0a1535);
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--cyan);
+      overflow: hidden;
+    }
+
+    .avatar-inner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+
+    /* Live badge */
+    .live-badge {
+      position: absolute;
+      top: 6px;
+      right: -2px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(0, 255, 136, 0.4);
+      border-radius: 20px;
+      padding: 2px 8px;
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: livePulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes livePulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1)
+      }
+
+      50% {
+        opacity: 0.5;
+        transform: scale(1.3)
+      }
+    }
+
+    .live-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 7px;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.12em;
+    }
+
+    .user-name-display {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--white);
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .profile-divider {
+      height: 1px;
+      margin: 10px 4px;
+      background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.3), transparent);
+    }
+
+    /* Info rows */
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 6px;
+      border-radius: 6px;
+      transition: background 0.2s;
+      font-size: 12px;
+    }
+
+    .info-row:hover {
+      background: rgba(0, 229, 255, 0.04);
+    }
+
+    .info-icon {
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .info-text {
+      color: var(--sub);
+      font-weight: 500;
+      letter-spacing: 0.03em;
+    }
+
+    .info-text span {
+      color: var(--white);
+    }
+
+    /* Gesture index */
+    .gesture-index-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      color: var(--sub);
+      text-align: center;
+      margin: 10px 0 8px;
+      text-transform: uppercase;
+    }
+
+    .gesture-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .gesture-list::-webkit-scrollbar {
+      width: 2px;
+    }
+
+    .gesture-list::-webkit-scrollbar-thumb {
+      background: rgba(0, 229, 255, 0.2);
+      border-radius: 2px;
+    }
+
+    .gesture-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: 5px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: var(--cyan2);
+      cursor: default;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .gesture-item::before {
+      content: '◈';
+      font-size: 8px;
+      color: rgba(0, 181, 216, 0.5);
+    }
+
+    .gesture-item:hover {
+      background: rgba(0, 229, 255, 0.06);
+      color: var(--cyan);
+    }
+
+    .gesture-item.active {
+      background: rgba(0, 229, 255, 0.1);
+      color: var(--cyan);
+      box-shadow: inset 2px 0 0 var(--cyan);
+    }
+
+    /* ── CENTRE PANEL ── */
+    .centre-col {
+      display: grid;
+      grid-template-rows: 58px 1fr 46px;
+      gap: 6px;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    /* ── TOP STRIP (text output) ── */
+    .cam-strip-top {
+      background: rgba(8, 5, 30, 0.92);
+      border: 1px solid rgba(0, 229, 255, 0.22);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      overflow: hidden;
+      position: relative;
+      backdrop-filter: blur(10px);
+    }
+    .cam-strip-top::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      background: linear-gradient(90deg, rgba(0,229,255,0.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    /* animated left accent line */
+    .cam-strip-top::after {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--cyan), var(--purple));
+      border-radius: 3px 0 0 3px;
+      box-shadow: 0 0 10px rgba(0,229,255,0.5);
+    }
+    .strip-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      color: var(--cyan);
+      opacity: 0.7;
+      white-space: nowrap;
+      padding-left: 6px;
+    }
+    .strip-ticker {
+      flex: 1;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--purp2);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .strip-badge {
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--bg);
+      background: var(--cyan);
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.1em;
+      white-space: nowrap;
+      animation: badgePulse 2s ease-in-out infinite;
+    }
+    @keyframes badgePulse {
+      0%, 100% { box-shadow: 0 0 0 rgba(0,229,255,0); }
+      50%       { box-shadow: 0 0 10px rgba(0,229,255,0.6); }
+    }
+
+    /* ── BOTTOM STRIP (hint bar) ── */
+    .cam-strip-bottom {
+      background: rgba(8, 5, 30, 0.92);
+      border: 1px solid rgba(255, 170, 0, 0.28);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+    .cam-strip-bottom::after {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--gold), var(--magenta));
+      border-radius: 3px 0 0 3px;
+      box-shadow: 0 0 10px rgba(255,215,0,0.5);
+    }
+    .strip-hint-text {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: #ffaa00;
+      letter-spacing: 0.06em;
+      flex: 1;
+      padding-left: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .strip-hint-text.success { color: var(--green); }
+    .strip-hint-text.hold    { color: var(--cyan); }
+
+    /* Camera container */
+    .cam-container {
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      border-radius: 18px;
+      overflow: visible;
+    }
+
+    /* Outer glow frame */
+    .cam-glow-frame {
+      position: absolute;
+      inset: -8px;
+      border-radius: 24px;
+      pointer-events: none;
+      z-index: 0;
+      box-shadow:
+        0 0 0 1.5px rgba(0, 229, 255, 0.35),
+        0 0 20px rgba(0, 229, 255, 0.2),
+        0 0 50px rgba(124, 60, 255, 0.15),
+        0 0 80px rgba(0, 229, 255, 0.06);
+      border: 1.5px solid rgba(0, 229, 255, 0.35);
+      border-radius: 24px;
+      animation: camGlow 3s ease-in-out infinite;
+    }
+
+    @keyframes camGlow {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 1.5px rgba(0, 229, 255, 0.35), 0 0 20px rgba(0, 229, 255, 0.2), 0 0 50px rgba(124, 60, 255, 0.15);
+      }
+
+      50% {
+        box-shadow: 0 0 0 1.5px rgba(0, 229, 255, 0.5), 0 0 30px rgba(0, 229, 255, 0.3), 0 0 70px rgba(124, 60, 255, 0.25);
+      }
+    }
+
+    /* Camera inner */
+    .cam-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 18px;
+      background: #000;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    #cam-feed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 18px;
+    }
+
+    /* Camera overlay UI elements */
+    .cam-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    /* Scan line animation */
+    .cam-scan-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.6), transparent);
+      animation: scanDown 3s linear infinite;
+    }
+
+    @keyframes scanDown {
+      0% {
+        top: 0%;
+        opacity: 0;
+      }
+
+      5% {
+        opacity: 1;
+      }
+
+      95% {
+        opacity: 1;
+      }
+
+      100% {
+        top: 100%;
+        opacity: 0;
+      }
+    }
+
+    /* Low-Confidence Glitch Warning */
+    .cam-container.warning .cam-glow-frame {
+      box-shadow: 0 0 0 1.5px rgba(255, 51, 85, 0.6), 0 0 30px rgba(255, 51, 85, 0.4);
+      border-color: rgba(255, 51, 85, 0.6);
+      animation: warningPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes warningPulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 1.5px rgba(255, 51, 85, 0.6), 0 0 30px rgba(255, 51, 85, 0.4);
+      }
+
+      50% {
+        box-shadow: 0 0 0 2px rgba(255, 51, 85, 0.8), 0 0 50px rgba(255, 51, 85, 0.6);
+      }
+    }
+
+    /* Corner brackets on camera */
+    .cam-bracket {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-color: var(--cyan);
+      border-style: solid;
+      opacity: 0.8;
+    }
+
+    .cam-bracket.tl {
+      top: 10px;
+      left: 10px;
+      border-width: 2px 0 0 2px;
+    }
+
+    .cam-bracket.tr {
+      top: 10px;
+      right: 10px;
+      border-width: 2px 2px 0 0;
+    }
+
+    .cam-bracket.bl {
+      bottom: 10px;
+      left: 10px;
+      border-width: 0 0 2px 2px;
+    }
+
+    .cam-bracket.br {
+      bottom: 10px;
+      right: 10px;
+      border-width: 0 2px 2px 0;
+    }
+
+    /* No camera placeholder */
+    .cam-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--sub);
+    }
+
+    .cam-placeholder-icon {
+      font-size: 48px;
+      opacity: 0.3;
+    }
+
+    .cam-placeholder-text {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      opacity: 0.5;
+      text-transform: uppercase;
+    }
+
+    /* ── HUD Dashboard ── */
+    .hud-dashboard {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .hud-box {
+      flex: 1;
+      background: rgba(8, 16, 42, 0.85);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 12px;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-align: center;
+      box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.05);
+    }
+
+    .hud-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: var(--sub);
+      letter-spacing: 0.1em;
+    }
+
+    .hud-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--white);
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    }
+
+    .hud-bar-bg {
+      width: 100%;
+      height: 4px;
+      background: rgba(0, 229, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .hud-bar-fill {
+      height: 100%;
+      transition: width 0.3s ease, background 0.3s ease;
+    }
+
+    /* Hold progress bar glow pulse */
+    @keyframes holdPulse {
+      0%, 100% { box-shadow: 0 0 4px rgba(255, 215, 0, 0.5); }
+      50%       { box-shadow: 0 0 14px rgba(255, 215, 0, 0.9); }
+    }
+    #hud-hold-bar {
+      transition: width 0.1s linear;
+    }
+    #hud-hold-bar.pulsing {
+      animation: holdPulse 0.6s ease-in-out infinite;
+    }
+    #hud-hold-bar.done {
+      animation: none;
+      box-shadow: 0 0 18px rgba(0, 255, 136, 0.8);
+    }
+
+    /* ── Hint bar ── */
+    .hint-bar {
+      background: rgba(8, 16, 42, 0.9);
+      border: 1px solid rgba(255, 170, 0, 0.3);
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: #ffaa00;
+      letter-spacing: 0.06em;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      transition: all 0.3s ease;
+      opacity: 0;
+    }
+
+    .hint-bar.visible {
+      opacity: 1;
+    }
+
+    .hint-bar.success {
+      border-color: rgba(0, 255, 136, 0.4);
+      color: var(--green);
+    }
+
+    .hint-bar.hold {
+      border-color: rgba(0, 229, 255, 0.4);
+      color: var(--cyan);
+    }
+
+    /* ── Session Stats ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+    .stat-box {
+      background: rgba(8, 5, 30, 0.9);
+      border: 1px solid rgba(0, 229, 255, 0.1);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .stat-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 0.12em;
+      color: var(--sub);
+      text-transform: uppercase;
+    }
+    .stat-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: 0.05em;
+      line-height: 1;
+    }
+    .stat-box.wide {
+      grid-column: span 2;
+    }
+    .stat-box.highlight {
+      border-color: rgba(124, 60, 255, 0.35);
+    }
+    .stat-value.purple { color: var(--purp2); }
+    .stat-value.green  { color: var(--green); }
+    .stat-value.gold   { color: var(--gold); }
+
+    /* ── RIGHT PANEL ── */
+    .right-panel {
+      padding: 12px 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Right panel HUD grid (2×2) */
+    .right-hud-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .right-hud-grid .hud-box {
+      padding: 10px 8px;
+      gap: 4px;
+    }
+
+    .right-hud-grid .hud-title {
+      font-size: 8px;
+    }
+
+    .right-hud-grid .hud-value {
+      font-size: 13px;
+    }
+
+    /* Vertical button stack in right panel */
+    .right-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding-top: 4px;
+    }
+
+    .right-controls .action-btn .action-btn-inner {
+      padding: 10px 16px;
+      font-size: 11px;
+      justify-content: center;
+    }
+
+    .right-controls .back-btn {
+      position: relative !important;
+      right: auto !important;
+      width: 100%;
+      text-align: center;
+      padding: 9px;
+      margin-top: 6px;
+      display: block;
+    }
+
+    /* Right panel hint bar */
+    .right-hint {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: #ffaa00;
+      letter-spacing: 0.05em;
+      background: rgba(8, 16, 42, 0.9);
+      border: 1px solid rgba(255, 170, 0, 0.3);
+      border-radius: 8px;
+      padding: 7px 10px;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+
+    .right-hint.success {
+      border-color: rgba(0, 255, 136, 0.4);
+      color: var(--green);
+    }
+
+    .right-hint.hold {
+      border-color: rgba(0, 229, 255, 0.4);
+      color: var(--cyan);
+    }
+
+    .panel-section-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      color: var(--sub);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .panel-section-title::before {
+      content: '▸';
+      color: var(--cyan);
+    }
+
+    .output-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    /* Output boxes */
+    .output-box {
+      flex: 1;
+      background: rgba(8, 5, 30, 0.9);
+      border: 1px solid rgba(0, 229, 255, 0.1);
+      border-radius: 8px;
+      padding: 10px;
+      overflow-y: auto;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: var(--cyan2);
+      line-height: 1.6;
+    }
+
+    .output-box::-webkit-scrollbar {
+      width: 2px;
+    }
+
+    .output-box::-webkit-scrollbar-thumb {
+      background: rgba(0, 229, 255, 0.2);
+    }
+
+    .output-box .output-entry {
+      padding: 2px 0;
+      border-bottom: 1px solid rgba(0, 229, 255, 0.05);
+    }
+
+    .output-box .output-entry:last-child {
+      border-bottom: none;
+    }
+
+    /* Toggle buttons row */
+    .toggle-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .toggle-btn {
+      flex: 1;
+      background: rgba(12, 8, 48, 0.9);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      border-radius: 6px;
+      padding: 7px 4px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      color: var(--cyan);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .toggle-btn:hover {
+      background: rgba(0, 229, 255, 0.08);
+    }
+
+    .toggle-btn.off {
+      border-color: rgba(255, 51, 85, 0.4);
+      color: var(--red);
+    }
+
+    /* Voice profile */
+    .voice-select {
+      width: 100%;
+      background: rgba(8, 5, 30, 0.9);
+      border: 1px solid rgba(0, 229, 255, 0.2);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: var(--cyan);
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      appearance: none;
+    }
+
+    .voice-select:focus {
+      border-color: var(--cyan);
+    }
+
+    .voice-select option {
+      background: #0d0a28;
+    }
+
+    /* ── BOTTOM BAR ── */
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 10px 0;
+      margin-top: auto;
+      position: relative;
+    }
+
+    .action-btn {
+      position: relative;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      outline: none;
+    }
+
+    .action-btn-inner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      border-radius: 8px;
+      border: 1.5px solid;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .action-btn-inner::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: currentColor;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .action-btn:hover .action-btn-inner::before {
+      opacity: 0.08;
+    }
+
+    .action-btn:active .action-btn-inner {
+      transform: scale(0.97);
+    }
+
+    .btn-start .action-btn-inner {
+      border-color: var(--green);
+      color: var(--green);
+      background: rgba(0, 255, 136, 0.05);
+    }
+
+    .btn-stop .action-btn-inner {
+      border-color: var(--sub);
+      color: var(--sub);
+      background: rgba(106, 122, 175, 0.05);
+    }
+
+    .btn-voice .action-btn-inner {
+      border-color: var(--cyan2);
+      color: var(--cyan2);
+      background: rgba(0, 180, 216, 0.05);
+    }
+
+    .btn-edit .action-btn-inner {
+      border-color: var(--purp2);
+      color: var(--purp2);
+      background: rgba(176, 159, 255, 0.05);
+    }
+
+    .btn-start:hover .action-btn-inner {
+      box-shadow: 0 0 20px rgba(0, 255, 136, 0.25);
+    }
+
+    .btn-stop:hover .action-btn-inner {
+      box-shadow: 0 0 20px rgba(106, 122, 175, 0.15);
+    }
+
+    .btn-voice:hover .action-btn-inner {
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+    }
+
+    .btn-edit:hover .action-btn-inner {
+      box-shadow: 0 0 20px rgba(176, 159, 255, 0.2);
+    }
+
+    .btn-icon {
+      font-size: 13px;
+    }
+
+    /* Back button */
+    .back-btn {
+      position: absolute;
+      right: 16px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      color: var(--sub);
+      cursor: pointer;
+      background: none;
+      border: none;
+      transition: color 0.2s;
+    }
+
+    .back-btn:hover {
+      color: var(--cyan);
+    }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal {
+      width: 520px;
+      background: rgba(12, 8, 38, 0.98);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: 16px;
+      padding: 28px;
+      position: relative;
+      animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 60px rgba(0, 229, 255, 0.1), 0 0 120px rgba(124, 60, 255, 0.1);
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: scale(0.92) translateY(20px);
+      }
+    }
+
+    .modal-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--purp2);
+      letter-spacing: 0.15em;
+      margin-bottom: 6px;
+    }
+
+    .modal-sub {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: var(--sub);
+      letter-spacing: 0.08em;
+      margin-bottom: 20px;
+    }
+
+    .gesture-edit-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(12, 8, 48, 0.8);
+      border: 1px solid rgba(0, 229, 255, 0.1);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+    }
+
+    .row-num {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: var(--sub);
+      width: 20px;
+      text-align: center;
+    }
+
+    .row-lbl {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: var(--sub);
+      width: 40px;
+    }
+
+    .edit-input {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid;
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .edit-input.label {
+      width: 110px;
+      border-color: rgba(176, 159, 255, 0.4);
+      color: var(--purp2);
+    }
+
+    .edit-input.phrase {
+      flex: 1;
+      border-color: rgba(0, 229, 255, 0.3);
+      color: var(--cyan);
+    }
+
+    .edit-input:focus {
+      box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.15);
+    }
+
+    .edit-input.label:focus {
+      border-color: var(--purp2);
+    }
+
+    .edit-input.phrase:focus {
+      border-color: var(--cyan);
+    }
+
+    .modal-btns {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .modal-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1.5px solid;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      background: transparent;
+      transition: all 0.2s;
+    }
+
+    .modal-btn.save {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    .modal-btn.close {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    .modal-btn:hover {
+      opacity: 0.8;
+    }
+
+    .modal-status {
+      text-align: center;
+      margin-top: 8px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      min-height: 18px;
+    }
+
+    .modal-status.ok {
+      color: var(--green);
+    }
+
+    .modal-status.err {
+      color: var(--red);
+    }
+
+    /* ── Voice popup ── */
+    .voice-modal {
+      width: 320px;
+    }
+
+    .voice-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 229, 255, 0.12);
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--white);
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .voice-option:hover {
+      background: rgba(0, 229, 255, 0.08);
+      border-color: rgba(0, 229, 255, 0.3);
+    }
+
+    .voice-option.active {
+      border-color: var(--purple);
+      background: rgba(124, 60, 255, 0.1);
+      color: var(--purp2);
+    }
+
+    .voice-option-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--sub);
+    }
+
+    .voice-option.active .voice-option-dot {
+      background: var(--purple);
+      box-shadow: 0 0 8px var(--purple);
+    }
+  </style>
+</head>
+
+<body>
+
+  <canvas id="bg-canvas"></canvas>
+  <div class="hex-grid"></div>
+  <div class="glow-blob blob1"></div>
+  <div class="glow-blob blob2"></div>
+  <div class="scanlines"></div>
+
+  <!-- TOP BANNER -->
+  <div class="top-banner">
+    <div class="banner-dots left">
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+    </div>
+    <div class="banner-frame">
+      <div class="banner-frame-bracket l"></div>
+      <div class="banner-text" id="banner-text">SIGN: [ — ]</div>
+      <div class="banner-frame-bracket r"></div>
+    </div>
+    <div class="banner-dots right">
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+      <div class="banner-dot"></div>
+    </div>
+  </div>
+
+  <!-- MAIN LAYOUT -->
+  <div class="layout">
+
+    <!-- LEFT PANEL -->
+    <div class="panel left-panel">
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+
+      <div class="profile-section">
+        <div class="avatar-ring" style="position:relative">
+          <div class="live-badge">
+            <div class="live-dot"></div>
+            <span class="live-text">LIVE</span>
+          </div>
+          <div class="avatar-inner" id="avatar-initials">AB</div>
+        </div>
+        <div class="user-name-display" id="user-name">abhishek</div>
+      </div>
+
+      <div class="profile-divider"></div>
+
+      <div class="info-row">
+        <span class="info-icon">👤</span>
+        <span class="info-text">Name: <span id="info-name">Abhishek M</span></span>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">🎂</span>
+        <span class="info-text">Age: <span id="info-age">21</span></span>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">📍</span>
+        <span class="info-text">Place: <span id="info-place">Mysuru</span></span>
+      </div>
+
+      <div class="profile-divider"></div>
+      <div class="gesture-index-title">GESTURE INDEX</div>
+
+      <div class="gesture-list" id="gesture-list">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- CENTRE: top strip + camera + bottom strip -->
+    <div class="centre-col">
+
+      <!-- TOP STRIP: text output ticker -->
+      <div class="cam-strip-top">
+        <span class="strip-label">◈ OUTPUT</span>
+        <span class="strip-ticker" id="text-output-strip">[ waiting for gesture... ]</span>
+        <span class="strip-badge" id="strip-gesture-badge">IDLE</span>
+      </div>
+
+      <!-- CAMERA -->
+      <div class="cam-container">
+        <div class="cam-glow-frame"></div>
+        <div class="cam-inner">
+          <img id="cam-feed" src=""
+            style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 18px;"
+            alt="">
+          <div class="cam-overlay">
+            <div class="cam-scan-line"></div>
+            <div class="cam-bracket tl"></div>
+            <div class="cam-bracket tr"></div>
+            <div class="cam-bracket bl"></div>
+            <div class="cam-bracket br"></div>
+            <div class="cam-placeholder" id="cam-placeholder">
+              <div class="cam-placeholder-icon">📷</div>
+              <div class="cam-placeholder-text">PRESS START TO BEGIN</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM STRIP: hint bar -->
+      <div class="cam-strip-bottom">
+        <span class="strip-hint-text" id="hint-bar">[ Detectable ASL signs will appear here ]</span>
+      </div>
+
+    </div>
+
+    <!-- RIGHT PANEL: HUD + logs + controls -->
+    <div class="panel right-panel">
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+
+      <!-- HUD 2×2 grid -->
+      <div class="panel-section-title">DETECTION HUD</div>
+      <div class="right-hud-grid">
+        <div class="hud-box" style="border-color: rgba(124,60,255,0.4)">
+          <div class="hud-title">DETECTED SIGN</div>
+          <div class="hud-value" id="hud-sign" style="color: var(--purp2)">[ — ]</div>
+        </div>
+        <div class="hud-box" style="border-color: rgba(0,229,255,0.3)">
+          <div class="hud-title">SYSTEM STATUS</div>
+          <div class="hud-value" id="hud-status-val" style="color: var(--green)">IDLE</div>
+          <div class="hud-bar-bg">
+            <div class="hud-bar-fill" id="hud-status-bar" style="background: var(--green); width: 20%"></div>
+          </div>
+        </div>
+        <div class="hud-box">
+          <div class="hud-title">ACCURACY</div>
+          <div class="hud-value" id="hud-acc-val" style="color: var(--cyan)">0%</div>
+          <div class="hud-bar-bg">
+            <div class="hud-bar-fill" id="hud-acc-bar" style="background: var(--cyan); width: 0%"></div>
+          </div>
+        </div>
+        <div class="hud-box" id="hold-hud-box" style="border-color: rgba(255,215,0,0.35)">
+          <div class="hud-title">HOLD PROGRESS</div>
+          <div class="hud-value" id="hud-hold-val" style="color: var(--gold)">0%</div>
+          <div class="hud-bar-bg" style="position:relative; overflow:visible;">
+            <div class="hud-bar-fill" id="hud-hold-bar" style="background: var(--gold); width: 0%; transition: width 0.1s linear; position:relative;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Text Output log -->
+      <div class="panel-section-title">TEXT OUTPUT</div>
+      <div class="output-box" id="text-output" style="flex: 1; min-height: 60px; max-height: 100px;">
+        <div class="output-entry" style="color:rgba(0,181,216,0.3)">[ waiting for gesture... ]</div>
+      </div>
+
+      <!-- Voice log -->
+      <div class="panel-section-title">VOICE LOG</div>
+      <div class="output-box" id="voice-log" style="flex: 1; min-height: 60px; max-height: 100px;">
+        <div class="output-entry" style="color:rgba(106,122,175,0.5)">[ voice log empty ]</div>
+      </div>
+
+      <!-- Control buttons stacked vertically -->
+      <div class="right-controls">
+        <button class="action-btn btn-start" onclick="startDetection()">
+          <div class="action-btn-inner">
+            <span class="btn-icon">▶</span> START DETECTION
+          </div>
+        </button>
+        <button class="action-btn btn-stop" onclick="stopDetection()">
+          <div class="action-btn-inner">
+            <span class="btn-icon">■</span> STOP
+          </div>
+        </button>
+        <button class="action-btn btn-edit" onclick="goToConfig()">
+          <div class="action-btn-inner">
+            <span class="btn-icon">⚙</span> EDIT &amp; INFO
+          </div>
+        </button>
+        <button class="back-btn" onclick="goBack()">← BACK TO MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Particle bg ───────────────────────────────────────────────────────────────
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    let W, H, particles = [];
+    function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+    class Particle {
+      constructor() { this.reset(); }
+      reset() {
+        this.x = Math.random() * W; this.y = Math.random() * H;
+        this.vx = (Math.random() - 0.5) * 0.25; this.vy = (Math.random() - 0.5) * 0.25;
+        this.r = Math.random() * 1.2 + 0.2; this.a = Math.random() * 0.4 + 0.05;
+        this.col = Math.random() > 0.5 ? '0,229,255' : '124,60,255';
+      }
+      update() { this.x += this.vx; this.y += this.vy; if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) this.reset(); }
+      draw() { ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fillStyle = `rgba(${this.col},${this.a})`; ctx.fill(); }
+    }
+    for (let i = 0; i < 80; i++) particles.push(new Particle());
+    function drawConns() {
+      for (let i = 0; i < particles.length; i++) for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y, d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 90) {
+          ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(0,229,255,${0.06 * (1 - d / 90)})`; ctx.lineWidth = 0.4; ctx.stroke();
+        }
+      }
+    }
+    (function loop() { ctx.clearRect(0, 0, W, H); drawConns(); particles.forEach(p => { p.update(); p.draw(); }); requestAnimationFrame(loop); })();
+
+    // ── Web Audio SFX System ────────────────────────────────────────────────────────
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const SFX = {
+      playTone: (freq, type, duration, vol = 0.05) => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+      },
+      hover: () => SFX.playTone(800, 'sine', 0.1, 0.02),
+      click: () => SFX.playTone(1200, 'square', 0.1, 0.03),
+      success: () => {
+        SFX.playTone(600, 'sine', 0.1, 0.05);
+        setTimeout(() => SFX.playTone(1200, 'sine', 0.3, 0.08), 100);
+      },
+      powerUp: () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.4);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+      },
+      powerDown: () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.4);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+      }
+    };
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.action-btn, .toggle-btn, .modal-btn, .back-btn, .voice-option').forEach(btn => {
+        btn.addEventListener('mouseenter', SFX.hover);
+        btn.addEventListener('mousedown', SFX.click);
+      });
+    });
+
+    // ── Data ──────────────────────────────────────────────────────────────────────
+    const user = JSON.parse(localStorage.getItem('hs_user') || '{"name":"Abhishek","age":"21","place":"Mysuru"}');
+
+    // Will be populated from backend
+    let PREDEFINED = {};
+    let CUSTOM = {};
+
+    let currentVoice = localStorage.getItem('hs_currentVoice') || 'Female';
+    let textEnabled = localStorage.getItem('hs_textEnabled') !== 'false';
+    let voiceEnabled = localStorage.getItem('hs_voiceEnabled') !== 'false';
+    let isRunning = false;
+    let lastTriggered = null;
+    const COOLDOWN = 1.0, CONF_THRESHOLD = 0.55, HINT_THRESHOLD = 0.75;
+
+    // ── Session Stats state ───────────────────────────────────────────────
+    let sessionStartTime  = null;
+    let sessionTimerInterval = null;
+    let sessionGestureCount  = parseInt(localStorage.getItem('hs_sessionGestureCount') || '0');
+    let sessionGestureFreq   = JSON.parse(localStorage.getItem('hs_sessionGestureFreq') || '{}');
+
+    function resetSessionStats() {
+      sessionGestureCount = 0;
+      sessionGestureFreq  = {};
+      localStorage.setItem('hs_sessionGestureCount', '0');
+      localStorage.setItem('hs_sessionTopGesture', '—');
+      localStorage.setItem('hs_sessionTimeFormatted', '00:00');
+      localStorage.setItem('hs_textLogs', '[]');
+      localStorage.setItem('hs_voiceLogs', '[]');
+    }
+    function startSessionTimer() {
+      sessionStartTime = Date.now();
+      localStorage.setItem('hs_sessionStartTime', sessionStartTime);
+      sessionTimerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+        const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        const formatted = `${m}:${s}`;
+        localStorage.setItem('hs_sessionTimeFormatted', formatted);
+      }, 1000);
+    }
+    function stopSessionTimer() {
+      clearInterval(sessionTimerInterval);
+      sessionTimerInterval = null;
+    }
+    function recordGesture(label) {
+      sessionGestureCount++;
+      sessionGestureFreq[label] = (sessionGestureFreq[label] || 0) + 1;
+      const top = Object.entries(sessionGestureFreq).sort((a,b) => b[1]-a[1])[0];
+      
+      localStorage.setItem('hs_sessionGestureCount', sessionGestureCount);
+      localStorage.setItem('hs_sessionGestureFreq', JSON.stringify(sessionGestureFreq));
+      const topFormatted = top ? `${top[0]} ×${top[1]}` : '—';
+      localStorage.setItem('hs_sessionTopGesture', topFormatted);
+    }
+
+    // ── Init UI ───────────────────────────────────────────────────────────────────
+    document.getElementById('user-name').textContent = user.name.split(' ')[0].toLowerCase();
+    document.getElementById('info-name').textContent = user.name;
+    document.getElementById('info-age').textContent = user.age;
+    document.getElementById('info-place').textContent = user.place;
+    document.getElementById('avatar-initials').textContent = user.name.split(' ').map(w => w[0].toUpperCase()).join('').slice(0, 2);
+
+    function loadConfig() {
+      return fetch('/get_config')
+        .then(r => r.json())
+        .then(data => {
+          PREDEFINED = data.predefined || {};
+          CUSTOM = data.custom || {};
+          
+          // Re-populate gesture list UI
+          const gl = document.getElementById('gesture-list');
+          gl.innerHTML = '';
+          const gestures = { ...PREDEFINED, ...CUSTOM };
+          Object.keys(gestures).forEach(lbl => {
+            const d = document.createElement('div');
+            d.className = 'gesture-item'; d.id = `gi-${lbl}`;
+            d.textContent = lbl; gl.appendChild(d);
+          });
+        })
+        .catch(err => console.error("Error loading config:", err));
+    }
+    loadConfig();
+
+    // ── State ──────────────────────────────────────────────────────────────────────
+    let noGestureStart = 0, lowConfStart = 0;
+
+    function getPhrase(label) {
+      if (label === 'PEACE') return `I am ${user.name}.`;
+      return PREDEFINED[label] || CUSTOM[label] || label;
+    }
+
+    // ── Camera and Detection integration ───────────────────────────────────────────
+    let simInterval = null;
+
+    function startDetection() {
+      if (isRunning) return;
+      SFX.powerUp();
+      isRunning = true;
+      lastTriggered = null;
+      resetSessionStats();
+      startSessionTimer();
+
+      // Tell backend to start camera
+      fetch('/start_camera', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: user.name })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Backend failed to start camera');
+          document.getElementById('cam-feed').src = '/video_feed?t=' + Date.now();
+          document.getElementById('cam-placeholder').style.display = 'none';
+          logVoice(`[${ts()}] ◈ System online`);
+          simInterval = setInterval(fetchDetectionStats, 100);
+        })
+        .catch(err => {
+          console.error("Error starting camera:", err);
+          document.getElementById('cam-placeholder').style.display = 'flex';
+        });
+    }
+
+    function stopDetection() {
+      if (!isRunning) return;
+      SFX.powerDown();
+      isRunning = false;
+      clearInterval(simInterval);
+
+      fetch('/stop_camera', { method: 'POST' });
+      document.getElementById('cam-feed').src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABABAACADs=';
+      document.getElementById('cam-placeholder').style.display = 'flex';
+
+      stopSessionTimer();
+      updateBanner('—'); updateGestureTag('—'); updateConf(0, '—');
+      setHint('[ System stopped. Press START to begin. ]', '');
+      logVoice(`[${ts()}] ◈ System offline`);
+      Object.keys({ ...PREDEFINED, ...CUSTOM }).forEach(l => { const el = document.getElementById(`gi-${l}`); if (el) el.classList.remove('active'); });
+    }
+
+    function fetchDetectionStats() {
+      if (!isRunning) return;
+      fetch('/get_stats')
+        .then(r => r.json())
+        .then(data => {
+          // SYNC: Process any new spoken phrases from backend
+          if (data.news && data.news.length > 0) {
+            data.news.forEach(item => {
+              if (textEnabled) appendText(item.phrase);
+              if (voiceEnabled) logVoice(`[${ts()}] ${item.gesture} → "${item.phrase}"`);
+              recordGesture(item.gesture);
+              SFX.success();
+            });
+          }
+
+          // If backend is currently speaking/outputting
+          if (data.is_speaking) {
+            updateStatus("speaking");
+            updateBanner('🔈 SPEAKING...');
+            updateGestureTag('🔈 SPEAKING');
+            updateConf(0.0, '—');
+            setHint('🔈 Outputting voice & text... please wait.', 'hold');
+            return;
+          }
+
+            if (data.gesture && data.gesture !== "—" && data.gesture !== "?") {
+            noGestureStart = 0;
+            updateStatus(true);
+            if (data.confidence < CONF_THRESHOLD) {
+              if (lowConfStart === 0) lowConfStart = Date.now();
+              else if (Date.now() - lowConfStart > 2000) {
+                document.querySelector('.cam-container').classList.add('warning');
+              }
+            } else {
+              lowConfStart = 0;
+              document.querySelector('.cam-container').classList.remove('warning');
+            }
+            processDetection(data.gesture, data.confidence, data);
+          } else {
+            updateStatus(false);
+            if (noGestureStart === 0) noGestureStart = Date.now() / 1000;
+            else if ((Date.now() / 1000) - noGestureStart > 1.0) {
+              if (lastTriggered !== null) {
+                lastTriggered = null;
+                // Inform backend to reset its last_spoken_gesture so we can trigger again
+                fetch('/reset_output', { method: 'POST' });
+              }
+            }
+            lowConfStart = 0;
+            document.querySelector('.cam-container').classList.remove('warning');
+            updateBanner('—'); updateGestureTag('—'); updateConf(data.confidence, '—');
+            updateHoldBar(0, false);
+            setHint('[ Detectable ASL signs will appear here ]', '');
+            lastTriggered = null;
+          }
+        })
+        .catch(err => console.error("Error fetching stats:", err));
+    }
+
+    function processDetection(label, conf, data) {
+      updateBanner(label);
+      updateGestureTag(label);
+      updateConf(conf, label);
+      highlightGesture(label);
+      updateHoldBar(data ? data.held_seconds : 0, data ? data.triggered : false);
+
+      if (conf >= CONF_THRESHOLD) {
+        if (data && !data.triggered && data.held_seconds < 1.0) {
+          const pct = Math.round(data.held_seconds * 100);
+          setHint(`⚡ Hold steady... ${pct}%`, 'hold');
+        } else {
+          setHint(`✔ ${label} active & triggered`, 'success');
+        }
+      } else if (conf > 0 && conf < HINT_THRESHOLD) {
+        const hints = { HELLO: '✋ Open palm, wave', HELP: '🤲 Flat hand on fist, lift', YES: '✊ Fist nod', NO: '☝ Index wag', PEACE: '✌ V shape', SORRY: '✊ Circular on chest' };
+        setHint(`⚠  Adjust: ${hints[label] || 'Hold gesture steady'}`, '');
+      } else {
+        setHint('[ Detectable ASL signs will appear here ]', '');
+      }
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────────
+    function updateBanner(g) {
+      document.getElementById('banner-text').textContent = `SIGN:  [ ${g} ]`;
+    }
+    function updateGestureTag(g) {
+      const el = document.getElementById('hud-sign');
+      if (el) el.textContent = `[ ${g} ]`;
+    }
+    function updateConf(cf, g) {
+      const pct = Math.round(cf * 100);
+      const valEl = document.getElementById('hud-acc-val');
+      const barEl = document.getElementById('hud-acc-bar');
+      if (valEl && barEl) {
+        valEl.textContent = `${pct}%`;
+        barEl.style.width = `${pct}%`;
+        if (cf >= HINT_THRESHOLD) {
+          valEl.style.color = 'var(--green)';
+          barEl.style.background = 'var(--green)';
+        } else if (cf >= CONF_THRESHOLD) {
+          valEl.style.color = 'var(--cyan)';
+          barEl.style.background = 'var(--cyan)';
+        } else {
+          valEl.style.color = 'var(--red)';
+          barEl.style.background = 'var(--red)';
+        }
+      }
+    }
+    function updateHoldBar(heldSeconds, triggered) {
+      const pct = Math.min(100, Math.round((heldSeconds || 0) * 100));
+      const valEl = document.getElementById('hud-hold-val');
+      const barEl = document.getElementById('hud-hold-bar');
+      const boxEl = document.getElementById('hold-hud-box');
+      if (!valEl || !barEl) return;
+      valEl.textContent = `${pct}%`;
+      barEl.style.width = `${pct}%`;
+      if (triggered || pct >= 100) {
+        // Completed — flash green
+        barEl.style.background = 'var(--green)';
+        valEl.style.color = 'var(--green)';
+        valEl.textContent = '✔ DONE';
+        barEl.classList.remove('pulsing');
+        barEl.classList.add('done');
+        if (boxEl) boxEl.style.borderColor = 'rgba(0,255,136,0.5)';
+      } else if (pct > 0) {
+        // Filling — gold pulse
+        barEl.style.background = 'var(--gold)';
+        valEl.style.color = 'var(--gold)';
+        barEl.classList.add('pulsing');
+        barEl.classList.remove('done');
+        if (boxEl) boxEl.style.borderColor = 'rgba(255,215,0,0.6)';
+      } else {
+        // Empty — idle
+        barEl.style.background = 'var(--gold)';
+        valEl.style.color = 'var(--sub)';
+        barEl.classList.remove('pulsing', 'done');
+        if (boxEl) boxEl.style.borderColor = 'rgba(255,215,0,0.2)';
+      }
+    }
+    function updateStatus(status) {
+      const valEl = document.getElementById('hud-status-val');
+      const barEl = document.getElementById('hud-status-bar');
+      if (valEl && barEl) {
+        if (status === "speaking") {
+          valEl.textContent = '🔈 SPEAKING';
+          barEl.style.width = '100%';
+          valEl.style.color = 'var(--gold)';
+          barEl.style.background = 'var(--gold)';
+        } else if (status === true) {
+          valEl.textContent = 'ACTIVE';
+          barEl.style.width = '100%';
+          valEl.style.color = 'var(--green)';
+          barEl.style.background = 'var(--green)';
+        } else {
+          valEl.textContent = 'IDLE';
+          barEl.style.width = '20%';
+          valEl.style.color = 'var(--sub)';
+          barEl.style.background = 'var(--sub)';
+        }
+      }
+    }
+    function setHint(text, type) {
+      const el = document.getElementById('hint-bar');
+      el.textContent = text;
+      el.className = 'strip-hint-text';
+      if (type === 'success') el.classList.add('success');
+      if (type === 'hold') el.classList.add('hold');
+    }
+    function highlightGesture(label) {
+      Object.keys({ ...PREDEFINED, ...CUSTOM }).forEach(l => { const el = document.getElementById(`gi-${l}`); if (el) el.classList.remove('active'); });
+      const el = document.getElementById(`gi-${label}`);
+      if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    }
+    function appendText(t) {
+      if (!textEnabled) return;
+
+      // Update localStorage log
+      const logs = JSON.parse(localStorage.getItem('hs_textLogs') || '[]');
+      logs.push(t);
+      if (logs.length > 50) logs.shift();
+      localStorage.setItem('hs_textLogs', JSON.stringify(logs));
+
+      // Update top strip ticker
+      const ticker = document.getElementById('text-output-strip');
+      if (ticker) ticker.textContent = t;
+      const badge = document.getElementById('strip-gesture-badge');
+      if (badge) { badge.textContent = 'DETECTED'; badge.style.background = 'var(--green)'; badge.style.color = 'var(--bg)'; }
+      setTimeout(() => { if (badge) { badge.textContent = 'IDLE'; badge.style.background = 'var(--cyan)'; } }, 2000);
+
+      // Also log to right panel text-output box
+      const box = document.getElementById('text-output');
+      if (!box) return;
+      if (box.children.length === 1 && box.children[0].style.color.includes('0.3')) box.innerHTML = '';
+      const d = document.createElement('div');
+      d.className = 'output-entry';
+      box.appendChild(d);
+
+      let i = 0;
+      function typeChar() {
+        if (i < t.length) {
+          d.textContent += t.charAt(i); i++;
+          box.scrollTop = box.scrollHeight;
+          setTimeout(typeChar, 10);
+        }
+      }
+      typeChar();
+    }
+    function logVoice(line) {
+      const logs = JSON.parse(localStorage.getItem('hs_voiceLogs') || '[]');
+      logs.push(line);
+      if (logs.length > 50) logs.shift();
+      localStorage.setItem('hs_voiceLogs', JSON.stringify(logs));
+
+      const box = document.getElementById('voice-log');
+      if (!box) return;
+      if (box.children.length === 1 && box.children[0].style.color.includes('0.5')) box.innerHTML = '';
+      const d = document.createElement('div');
+      d.className = 'output-entry';
+      d.textContent = line;
+      box.appendChild(d); box.scrollTop = box.scrollHeight;
+    }
+    function ts() { return new Date().toTimeString().slice(0, 8); }
+
+    // TTS
+    function speakText(text) {
+      if (!voiceEnabled) return;
+      const ut = new SpeechSynthesisUtterance(text);
+      const voices = speechSynthesis.getVoices();
+      const profileMap = {
+        'Female': v => v.name.toLowerCase().includes('female') || v.name.includes('Zira') || v.name.includes('Hazel'),
+        'Male': v => v.name.toLowerCase().includes('male') || v.name.includes('David')
+      };
+      const match = voices.find(profileMap[currentVoice] || (() => false));
+      if (match) ut.voice = match;
+      const rateMap = { 'Female': 1.0, 'Male': 0.85 };
+      ut.rate = rateMap[currentVoice] || 1.0;
+      ut.volume = 1.0;
+      speechSynthesis.speak(ut);
+    }
+
+    function goToConfig() {
+      stopDetection();
+      window.location.href = 'info.html';
+    }
+
+    function goBack() { stopDetection(); window.location.href = 'register.html'; }
+  </script>
+</body>
+
+</html>
